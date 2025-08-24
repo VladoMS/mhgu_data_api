@@ -22,6 +22,9 @@ RUN bundle config set without 'development test' \
 
 # Copy app code (expects app.rb + config.ru in repo root)
 COPY app.rb config.ru ./
+# copy API modules and data
+COPY api ./api
+COPY monsters.json /data/monsters.json
 
 # Data path inside the container
 ENV MONSTERS_JSON=/data/monsters.json
