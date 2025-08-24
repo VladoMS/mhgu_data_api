@@ -3,7 +3,7 @@ require_relative './helpers'
 
 module MHGUMonsters
   def self.call(req, index)
-    if req.request_method == "GET" && req.path_info == "/monsters"
+  if req.request_method == "GET" && req.path_info == "/api/v1/monsters"
       q      = (req.params["q"] || "").downcase.strip
       limit  = (req.params["limit"] || "9999").to_i
       offset = (req.params["offset"] || "0").to_i
@@ -19,7 +19,7 @@ module MHGUMonsters
       total = items.size
       page  = items.slice(offset, limit) || []
 
-      [200, { "Content-Type" => "application/json" }, [JSON.dump({ count: page.size, total: total, offset: offset, limit: limit, items: page })]]
+  [200, { "Content-Type" => "application/json" }, [JSON.dump({ count: page.size, total: total, offset: offset, limit: limit, items: page })]]
     else
       nil
     end

@@ -15,7 +15,7 @@ It exposes both **raw JSON data** and **Twitch/overlay-friendly star ratings** f
 - Multiple output formats:
   - **Raw JSON** (cleaned, no zeros or nulls)
   - **Star rating text** (for Twitch chat / bots)
-  - **Star rating JSON** (with summaries and per-part stars)
+  - **Star rating JSON** (with summaries and per-part)
 
 ---
 
@@ -76,79 +76,135 @@ GET /monsters?q=zinogre
 }
 ```
 
-### 3. Get monster data
+# MHGU Monster Data API
 
-#### Default (raw JSON)
-```http
-GET /monster?name=Zinogre
-```
-
-Clean JSON with A/B tabs, only fields with values > 0.
+A small Ruby + Rack API that serves **Monster Hunter Generations Ultimate (MHGU)** monster data scraped from [Kiranico](https://mhgu.kiranico.com/).
+It exposes both **raw JSON data** and **Twitch/overlay-friendly star ratings** for hitzones, elements, and abnormal statuses.
 
 ---
 
-#### Star ratings (Twitch text)
+## ✨ Features
 
-Classic A/B tables:
-```http
-GET /monster?name=Zinogre&stars=1
-```
+- Full monster list with names, slugs, and URLs
+- Detailed monster data with:
+  - **Hitzone values** (cut / blunt / shot)
+  - **Elemental weaknesses** (fire / water / thunder / ice / dragon)
+  - **Abnormal status thresholds** (poison, paralysis, sleep, stun, exhaust, blast, jump, mount)
+- Multiple output formats:
+  - **Raw JSON** (cleaned, no zeros or nulls)
+  - **Star rating text** (for Twitch chat / bots)
+  - **Star rating JSON** (with summaries and per-part stars)
 
-Collapsed (Wilds-style merged):
-```http
-GET /monster?name=Zinogre&stars=2
+---
+
+## 📦 Requirements
+
+- Ruby 3.1+ (works fine with rbenv)
+- Bundler
+- Gems: `rack`, `json`
+
+Install dependencies:
+
+```bash
+bundle install
 ```
 
 ---
 
-#### Star ratings (JSON with summaries)
+## 🚀 Running
 
-Classic A/B with `best_raw`, `best_elem`, per-part stars:
-```http
-GET /monster?name=Zinogre&stars=1&format=json
+Start the server with Rack:
+
+```bash
+bundle exec rackup -p 4567
 ```
 
-Collapsed with `header.best_weapons`, `header.best_elements`, per-part stars:
+The API will be available at [http://localhost:4567](http://localhost:4567).
+
+---
+
+## 🔑 Endpoints (legacy docs)
+
+These are the original (pre-versioned) endpoints; the new routes are documented in the "Routes (new)" section below.
+
+### 1. Healthcheck
 ```http
-GET /monster?name=Zinogre&stars=2&format=json
+GET /health
 ```
 
-**Example (stars=2, format=json):**
+### 2. List monsters
+```http
+GET /monsters
+GET /monsters?q=zinogre
+```
+
+**Example response:**
 ```json
 {
-  "name": "Zinogre",
-  "slug": "zinogre",
-  "url": "https://mhgu.kiranico.com/monster/...",
-  "header": {
-    "best_weapons": [
-      { "type": "cut", "icon": "⚔️", "part": "Foreleg", "value": 45, "stars": "★★★" },
-      { "type": "blunt", "icon": "🔨", "part": "Head", "value": 45, "stars": "★★★" },
-      { "type": "shot", "icon": "🎯", "part": "Head", "value": 70, "stars": "★★★" }
-    ],
-    "best_elements": [
-      { "element": "ice", "icon": "❄️", "part": "Hindleg", "value": 25, "stars": "★★★" },
-      { "element": "dragon", "icon": "🐉", "part": "Head", "value": 10, "stars": "★" }
-    ]
-  },
-  "parts": [
+  "count": 1,
+  "total": 1,
+  "offset": 0,
+  "limit": 9999,
+  "items": [
     {
-      "part": "Head",
-      "raw": { "cut": 30, "blunt": 45, "shot": 70 },
-      "element": { "ice": 25, "dragon": 10 },
-      "stars": {
-        "cut": "★",
-        "blunt": "★★★",
-        "shot": "★★★",
-        "ice": "★★★",
-        "dragon": "★"
-      }
+      "name": "Zinogre",
+      "slug": "zinogre",
+      "url": "https://mhgu.kiranico.com/monster/xxxxx",
+      "api_url": "/monster?name=zinogre"
     }
-  ],
-  "status": [
-    { "key": "stun", "icon": "💫", "initial": 150, "stars": "★★★" },
-    { "key": "poison", "icon": "☠️", "initial": 180, "stars": "★★" }
   ]
 }
+```
+
+### Routes
+
+Quick reference for the new RESTful routes (versioned).
+
+Base prefix: `/api/v1`
+
+Endpoints
+
+- Health
+  - GET /api/v1/health
+  - Returns 200 and a small JSON health object.
+
+- Legend / metadata
+  - GET /api/v1/legend
+  - Returns threshold values, icons and notes as JSON.
+
+- Monsters collection (list / search)
+  - GET /api/v1/monsters
+  - Query params: `q`, `limit`, `offset`
+  - Example: `/api/v1/monsters?q=zinogre&limit=10`
+
+- Monster resource (by slug)
+  - GET /api/v1/monsters/:slug
+  - Returns cleaned JSON by default (A/B tabs, status, hitzones).
+  - Example: `/api/v1/monsters/kelbi`
+
+- Monster views
+  - GET /api/v1/monsters/:slug/views/simple
+    - Replaces previous "collapsed" view; returns merged/simple view
+    - JSON default, `?format=plain` for plain text
+    - Example: `/api/v1/monsters/kelbi/views/simple`
+
+Format rules
+- Default output is JSON (Content-Type: application/json).
+- To request plain text (Twitch-friendly), append `?format=plain`.
+
+Slug note
+- The `:slug` path segment should be the monster slug (lowercase, hyphenated). The server attempts a case-insensitive lookup and will match by name if necessary.
+
+Examples (curl)
+```bash
+# JSON default
+curl -s http://localhost:4567/api/v1/monsters/kelbi
+
+# plain text stars view
+curl -s http://localhost:4567/api/v1/monsters/kelbi/views/stars?format=plain
+
+# JSON simple (merged) view
+curl -s http://localhost:4567/api/v1/monsters/kelbi/views/simple
 ```
 
 ---
@@ -190,3 +246,6 @@ GET /monster?name=Zinogre&stars=2&format=json
 ## 📝 License
 
 MIT — free to use, modify, and share.
+
+---
+

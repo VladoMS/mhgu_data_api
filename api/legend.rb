@@ -3,7 +3,7 @@ require_relative './helpers'
 
 module MHGULegend
   def self.call(req)
-    if req.request_method == "GET" && req.path_info == "/legend"
+    if req.request_method == "GET" && req.path_info == "/api/v1/legend"
       [200, { "Content-Type" => "application/json" }, [JSON.dump(legend_json)]]
     else
       nil

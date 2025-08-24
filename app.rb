@@ -42,7 +42,7 @@ module MHGU
     (data["monsters"] || {}).values.map do |m|
       name = m["name"] || m["slug"] || "Monster"
       slug = (m["slug"] || name.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/^-|-$/, ""))
-      { name: name, slug: slug, url: m["url"], api_url: "/monster?name=#{Rack::Utils.escape(slug)}" }
+  { name: name, slug: slug, url: m["url"], api_url: "/api/v1/monsters/#{Rack::Utils.escape(slug)}" }
     end.sort_by { |m| m[:name] }
   end
   end

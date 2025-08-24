@@ -5,41 +5,43 @@ module MHGUMonster
   module_function
 
   def call(req, data)
-    if req.request_method == "GET" && req.path_info == "/monster"
-      name    = req.params["name"].to_s.downcase
-      stars   = req.params["stars"].to_s
-      as_json = req.params["format"].to_s.downcase == "json"
-      return [400, { "Content-Type" => "application/json" }, [JSON.dump(error: "missing ?name=")]] if name.empty?
+  # Expect paths like: /api/v1/monsters/:slug or /api/v1/monsters/:slug/views/simple
+    if req.request_method == "GET" && req.path_info.start_with?("/api/v1/monsters")
+      parts = req.path_info.sub(%r{^/api/v1/monsters/?}, "").split('/').reject(&:empty?)
+      slug = parts[0]
+  view = parts[1] # e.g. 'views'
+  subview = parts[2] # e.g.'simple'
 
-      mon = find_mon(data, name)
+      return [400, { "Content-Type" => "application/json" }, [JSON.dump(error: "missing slug")]] if slug.to_s.empty?
+
+      mon = find_mon(data, slug.downcase)
       return [404, { "Content-Type" => "application/json" }, [JSON.dump(error: "monster not found: #{name}")]] unless mon
+  # Default to JSON; only plain text when ?format=plain
+  is_plain = req.params["format"].to_s.downcase == "plain"
 
-      case stars
-      when "1"
-        if as_json
-          body = build_stars_json(mon)
-          [200, { "Content-Type" => "application/json" }, [JSON.dump(body)]]
-        else
-          text = build_stars_text(mon)
+      if view == 'views' && subview == 'simple'
+        if is_plain
+          text = build_simple_text(mon)
           [200, { "Content-Type" => "text/plain; charset=utf-8" }, [text]]
-        end
-      when "2"
-        if as_json
-          body = build_collapsed_json(mon)
-          [200, { "Content-Type" => "application/json" }, [JSON.dump(body)]]
         else
-          text = build_collapsed_text(mon)
-          [200, { "Content-Type" => "text/plain; charset=utf-8" }, [text]]
+          body = build_simple_json(mon)
+          [200, { "Content-Type" => "application/json" }, [JSON.dump(body)]]
         end
       else
-        [200, { "Content-Type" => "application/json" }, [JSON.dump(simple_json(mon))]]
+        # default: JSON unless ?format=plain requested
+        if is_plain
+          text = build_simple_text(mon)
+          [200, { "Content-Type" => "text/plain; charset=utf-8" }, [text]]
+        else
+          [200, { "Content-Type" => "application/json" }, [JSON.dump(simple_json(mon))]]
+        end
       end
     else
       nil
     end
   end
 
-  # ---------- JSON (no stars) ----------
+  # ---------- JSON ----------
   def simple_json(mon)
     hit  = mon["hit_data"] || {}
     tabs = {}
@@ -71,7 +73,7 @@ module MHGUMonster
     status_hash.select { |_k,v| v["initial"].is_a?(Numeric) && v["initial"] > 0 }
   end
 
-  # ---------- TEXT: stars=1 (A/B) ----------
+  # ---------- Monster Data (A/B) ----------
   def build_stars_text(mon)
     name = mon["name"]
     hit  = mon["hit_data"] || {}
@@ -80,7 +82,6 @@ module MHGUMonster
     hit.each do |tab, rows|
       next if rows.nil? || rows.empty?
       out << "#{name} — #{tab}"
-      out << ""
 
       rows.each do |r|
         part = r["part"] || r["Body Part"]
@@ -105,17 +106,15 @@ module MHGUMonster
     out.join("\n")
   end
 
-  # ---------- TEXT: stars=2 (collapsed) ----------
-  def build_collapsed_text(mon)
+  # ---------- TEXT: Monster Data (simple) ----------
+  def build_simple_text(mon)
+    # same as previous collapsed text behavior
     name = mon["name"]
     hit  = mon["hit_data"] || {}
     merged_rows = merge_tabs(hit["A"], hit["B"])
     return "#{name}\n(No hitzone data)" if merged_rows.empty?
 
     out = []
-    out << "#{name} — Combined"
-    out << ""
-
     merged_rows.each do |r|
       part = r["part"] || r["Body Part"]
 
@@ -164,8 +163,8 @@ module MHGUMonster
     body
   end
 
-  # ---------- JSON: stars=2 (collapsed with summaries) ----------
-  def build_collapsed_json(mon)
+  # ---------- JSON: stars=2 (simple with summaries) ----------
+  def build_simple_json(mon)
     body = { name: mon["name"], slug: mon["slug"], url: mon["url"] }
     hit  = mon["hit_data"] || {}
     merged_rows = merge_tabs(hit["A"], hit["B"])
