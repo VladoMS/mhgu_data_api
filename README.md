@@ -57,7 +57,7 @@ curl -s http://localhost:4567/api/v1/monsters/kelbi
 curl -s http://localhost:4567/api/v1/monsters/kelbi/views/simple
 
 # Plain text stars (Twitch-friendly)
-curl -s "http://localhost:4567/api/v1/monsters/kelbi/views/stars?format=plain"
+curl -s "http://localhost:4567/api/v1/monsters/kelbi/views/simple?format=plain"
 ```
 
 Star thresholds & legend
