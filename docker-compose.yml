@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  mhgu-api:
+    build: .
+    image: mhgu-api:latest
+    container_name: mhgu-api
+    environment:
+      # Path inside the container; we mount the local monsters.json at this location
+      MONSTERS_JSON: /data/monsters.json
+    volumes:
+      # Mount your local monsters.json read-only
+      - ./monsters.json:/data/monsters.json:ro
+      - bundle_cache:/app/vendor/bundle
+    ports:
+      - "9001:4567"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4567/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  bundle_cache:
+    driver: local

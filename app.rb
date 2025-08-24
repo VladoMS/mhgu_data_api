@@ -37,7 +37,6 @@ module MHGU
     end
   end
 
-  # returns star string or nil if it would be "—"
   def self.star_or_nil(value, thresholds)
     s = stars_for(value, thresholds)
     s == "—" ? nil : s
@@ -51,7 +50,9 @@ module MHGU
 
     def call(env)
       req = Rack::Request.new(env)
+
       return [200, headers_json, [JSON.dump(ok: true)]] if req.request_method == "GET" && req.path_info == "/health"
+      return [200, headers_json, [JSON.dump(legend_json)]] if req.request_method == "GET" && req.path_info == "/legend"
       return [200, {}, []] if req.options?
 
       if req.request_method == "GET" && req.path_info == "/monsters"
@@ -66,6 +67,41 @@ module MHGU
     end
 
     private
+
+    # ---------- /legend ----------
+    def legend_json
+      {
+        weapons: WEAPON_KEYS.map { |k| { key: k, label: k.capitalize, icon: WEAPON_ICONS[k] } },
+        elements: ELEM_KEYS.map { |k| { key: k, label: k.capitalize, icon: ELEM_ICONS[k] } },
+        statuses: STATUS_ICONS.map { |k,v| { key: k, label: k.split('_').map(&:capitalize).join(' '), icon: v } },
+
+        thresholds: {
+          raw: {
+            one:    MHGU::RAW_THRESH[:one],    # ≥ one  => ★
+            two:    MHGU::RAW_THRESH[:two],    # ≥ two  => ★★
+            three:  MHGU::RAW_THRESH[:three]   # ≥ three=> ★★★
+          },
+          element: {
+            one:    MHGU::ELM_THRESH[:one],
+            two:    MHGU::ELM_THRESH[:two],
+            three:  MHGU::ELM_THRESH[:three]
+          },
+          status_initial: {
+            # For statuses, lower initial = more vulnerable
+            three_max: 150, # ≤ 150 => ★★★
+            two_max:   300, # 151–300 => ★★
+            one_max:   500  # 301–500 => ★
+          }
+        },
+
+        notes: [
+          "Weapons: cut/blunt/shot use RAW thresholds (higher is better).",
+          "Elements use ELEMENT thresholds (higher is better).",
+          "Statuses use initial build-up values (lower is better).",
+          "Any value below ★ threshold is omitted in outputs."
+        ]
+      }
+    end
 
     # ---------- /monsters (list) ----------
     def handle_monsters(req)
@@ -100,7 +136,6 @@ module MHGU
       name    = req.params["name"].to_s.downcase
       stars   = req.params["stars"].to_s
       as_json = req.params["format"].to_s.downcase == "json"
-
       return [400, headers_json, [JSON.dump(error: "missing ?name=")]] if name.empty?
 
       mon = find_mon(@data, name)
@@ -124,8 +159,7 @@ module MHGU
           [200, headers_text, [text]]
         end
       else
-        # default: clean JSON (no stars), zeros/nils removed
-        [200, headers_json, [JSON.dump(simple_json(mon))]]
+        [200, headers_json, [JSON.dump(simple_json(mon))]]  # default: clean JSON
       end
     end
 
@@ -169,7 +203,6 @@ module MHGU
 
       hit.each do |tab, rows|
         next if rows.nil? || rows.empty?
-
         out << "#{name} — #{tab}"
         out << ""
 
@@ -214,7 +247,7 @@ module MHGU
           v = r[k]; s = MHGU.star_or_nil(v, RAW_THRESH); s ? "#{WEAPON_ICONS[k]}#{s}" : nil
         }.compact.join(" ")
 
-        elem_block = ELEM_KEYS.map { |k|
+        elem_block = ELM_KEYS.map { |k|
           v = r[k]; s = MHGU.star_or_nil(v, ELM_THRESH); s ? "#{ELEM_ICONS[k]}#{s}" : nil
         }.compact.join(" ")
 
@@ -279,7 +312,6 @@ module MHGU
       body
     end
 
-    # Build a compact part entry with raw/element values and star map
     def part_entry_with_stars(r)
       part = r["part"] || r["Body Part"]
       raw_vals = {}
@@ -300,7 +332,6 @@ module MHGU
       { part: part, raw: raw_vals, element: elem_vals, stars: stars }
     end
 
-    # Status helpers
     def status_array(status_hash)
       return [] if status_hash.nil? || status_hash.empty?
       out = []
@@ -320,10 +351,10 @@ module MHGU
       arr.map { |h| "#{h[:icon]}#{h[:stars]}" }.join(" ")
     end
 
-    # ---------- shared helpers ----------
+    # ---------- helpers ----------
     def best_element_key(rows)
       best_key, best_val = nil, -1
-      ELEM_KEYS.each do |k|
+      ELM_KEYS.each do |k|
         vals = rows.map { |r| r[k] }.select { |v| MHGU.star_or_nil(v, ELM_THRESH) }
         v = vals.max || 0
         if v > best_val
@@ -342,7 +373,6 @@ module MHGU
       }.compact.sort_by { |h| -h[:val] }.first(n)
     end
 
-    # Merge A/B rows by part, taking max per value; preserve stable order (A first, then B-only)
     def merge_tabs(rows_a, rows_b)
       rows_a = Array(rows_a)
       rows_b = Array(rows_b)
