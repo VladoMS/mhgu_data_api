@@ -1,29 +1,19 @@
-# MHGU Monster Data API
+MHGU Monster Data API
+======================
 
-A small Ruby + Rack API that serves **Monster Hunter Generations Ultimate (MHGU)** monster data scraped from [Kiranico](https://mhgu.kiranico.com/).  
-It exposes both **raw JSON data** and **Twitch/overlay-friendly star ratings** for hitzones, elements, and abnormal statuses.
+Compact, versioned HTTP API that serves cleaned Monster Hunter Generations Ultimate (MHGU) monster data and streamer-friendly star ratings.
 
----
+This repository contains a small Rack application written in Ruby. The server exposes a searchable monster index, detailed monster data (hitzones, elements, statuses), and simplified "star" views suitable for chat bots and overlays.
 
-## ✨ Features
+Base API prefix: `/api/v1`
 
-- Full monster list with names, slugs, and URLs
-- Detailed monster data with:
-  - **Hitzone values** (cut / blunt / shot)
-  - **Elemental weaknesses** (fire / water / thunder / ice / dragon)
-  - **Abnormal status thresholds** (poison, paralysis, sleep, stun, exhaust, blast, jump, mount)
-- Multiple output formats:
-  - **Raw JSON** (cleaned, no zeros or nulls)
-  - **Star rating text** (for Twitch chat / bots)
-  - **Star rating JSON** (with summaries and per-part)
+Quick start
+-----------
 
----
+Requirements
 
-## 📦 Requirements
-
-- Ruby 3.1+ (works fine with rbenv)
+- Ruby 3.1+
 - Bundler
-- Gems: `rack`, `json`
 
 Install dependencies:
 
@@ -31,155 +21,93 @@ Install dependencies:
 bundle install
 ```
 
----
-
-## 🚀 Running
-
-Start the server with Rack:
+Run locally with rackup:
 
 ```bash
 bundle exec rackup -p 4567
 ```
 
-The API will be available at [http://localhost:4567](http://localhost:4567).
+The API will be reachable at http://localhost:4567. The app loads `./monsters.json` by default; set `MONSTERS_JSON` to override.
 
----
+Routes
+------
 
-## 🔑 Endpoints
+All endpoints are versioned under `/api/v1`.
 
-Quick reference for the new RESTful routes (versioned).
+- `GET /api/v1/health` — basic health check.
+- `GET /api/v1/legend` — thresholds, icon keys, and notes used by star views.
+- `GET /api/v1/monsters` — monster index. Query params: `q` (search), `limit`, `offset`.
+- `GET /api/v1/monsters/:slug` — monster detail JSON by slug (case-insensitive, falls back to name match).
+- `GET /api/v1/monsters/:slug/views/simple` — merged/simple JSON view across parts.
+- `GET /api/v1/monsters/:slug/views/stars` — per-part star ratings and summaries.
 
-Base prefix: `/api/v1`
+Formats & examples
+------------------
 
-Endpoints
+- Default response: JSON (`Content-Type: application/json`).
+- Plain text: append `?format=plain` for Twitch/IRC-friendly text output.
 
-- Health
-  - GET /api/v1/health
-  - Returns 200 and a small JSON health object.
+Examples:
 
-- Legend / metadata
-  - GET /api/v1/legend
-  - Returns threshold values, icons and notes as JSON.
-
-- Monsters collection (list / search)
-  - GET /api/v1/monsters
-  - Query params: `q`, `limit`, `offset`
-  - Example: `/api/v1/monsters?q=zinogre&limit=10`
-
-- Monster resource (by slug)
-  - GET /api/v1/monsters/:slug
-  - Returns cleaned JSON by default (A/B tabs, status, hitzones).
-  - Example: `/api/v1/monsters/kelbi`
-
-- Monster views
-  - GET /api/v1/monsters/:slug/views/simple
-    - Replaces previous "collapsed" view; returns merged/simple view
-    - JSON default, `?format=plain` for plain text
-    - Example: `/api/v1/monsters/kelbi/views/simple`
-
-Format rules
-- Default output is JSON (Content-Type: application/json).
-- To request plain text (Twitch-friendly), append `?format=plain`.
-
-Slug note
-- The `:slug` path segment should be the monster slug (lowercase, hyphenated). The server attempts a case-insensitive lookup and will match by name if necessary.
-
-Examples (curl)
 ```bash
-# JSON default
+# JSON monster detail
 curl -s http://localhost:4567/api/v1/monsters/kelbi
 
-# plain text stars view
-curl -s http://localhost:4567/api/v1/monsters/kelbi/views/stars?format=plain
-
-# JSON simple (merged) view
+# JSON simple view
 curl -s http://localhost:4567/api/v1/monsters/kelbi/views/simple
+
+# Plain text stars (Twitch-friendly)
+curl -s "http://localhost:4567/api/v1/monsters/kelbi/views/stars?format=plain"
 ```
 
----
+Star thresholds & legend
+------------------------
 
-# MHGU Monster Data API
+The API exposes `/api/v1/legend` with exact values. Basic rules:
 
-A small Ruby + Rack API that serves **Monster Hunter Generations Ultimate (MHGU)** monster data scraped from [Kiranico](https://mhgu.kiranico.com/).
-It exposes both **raw JSON data** and **Twitch/overlay-friendly star ratings** for hitzones, elements, and abnormal statuses.
+- Hitzones (cut/blunt/shot): ≥45 → 3★, 35–44 → 2★, 25–34 → 1★, <25 → —
+- Elements: ≥25 → 3★, 20–24 → 2★, 10–19 → 1★, <10 → —
+- Statuses: lower numeric thresholds indicate stronger status (legend shows exact cutoffs).
 
----
+Development notes
+-----------------
 
-## ✨ Features
+- Endpoints are implemented in `api/`:
+  - `api/helpers.rb` — shared constants and helpers
+  - `api/monsters.rb` — index and search
+  - `api/monster.rb` — monster detail and view rendering
 
-- Full monster list with names, slugs, and URLs
-- Detailed monster data with:
-  - **Hitzone values** (cut / blunt / shot)
-  - **Elemental weaknesses** (fire / water / thunder / ice / dragon)
-  - **Abnormal status thresholds** (poison, paralysis, sleep, stun, exhaust, blast, jump, mount)
-- Multiple output formats:
-  - **Raw JSON** (cleaned, no zeros or nulls)
-  - **Star rating text** (for Twitch chat / bots)
-  - **Star rating JSON** (with summaries and per-part stars)
+- Suggested improvements:
+  - Extract pure computation logic into service files for easy unit testing.
+  - Add a test suite (Minitest or RSpec) for core services.
 
----
+Docker
+------
 
-## 📦 Requirements
-
-- Ruby 3.1+ (works fine with rbenv)
-- Bundler
-- Gems: `rack`, `json`
-
-Install dependencies:
+Build and run with Docker Compose:
 
 ```bash
-bundle install
+docker compose up --build
 ```
 
----
-
-## 🚀 Running
-
-Start the server with Rack:
+Or build and run directly:
 
 ```bash
-bundle exec rackup -p 4567
+docker build -t mhgu-data-api .
+docker run -e MONSTERS_JSON=/data/monsters.json -p 4567:4567 mhgu-data-api
 ```
 
-The API will be available at [http://localhost:4567](http://localhost:4567).
+Contributing
+------------
 
-## ⚔️ Star rating thresholds
+Open issues or pull requests for bugs and small features. Keep changes focused and include tests where practical.
 
-**Raw hitzones (cut/blunt/shot):**
-- `≥ 45` → ★★★
-- `35–44` → ★★
-- `25–34` → ★
-- `< 25` → —
+License
+-------
 
-**Elements (fire/water/thunder/ice/dragon):**
-- `≥ 25` → ★★★
-- `20–24` → ★★
-- `10–19` → ★
-- `< 10` → —
+MIT — see the `LICENSE` file.
 
-**Statuses (poison, stun, etc.):**
-- `≤ 150` → ★★★ (very weak to it)
-- `151–300` → ★★
-- `301–500` → ★
-- `> 500` → —
+Short changelog
+---------------
 
----
-
-## 🎯 Usage Ideas
-
-- Hook into **Streamer.bot** or any Twitch bot to reply with monster weaknesses:
-  ```
-  !mhgu zinogre
-  !mhgu zinogre stars=2
-  ```
-- Display JSON data in overlays (OBS / web overlays).
-- Generate cards or infographics.
-
----
-
-## 📝 License
-
-MIT — free to use, modify, and share.
-
----
-
+- New API is versioned under `/api/v1` and defaults to JSON responses; append `?format=plain` for plain text views.
