@@ -13,7 +13,7 @@ module MHGU
   class API
   def initialize(json_path:)
     @data  = JSON.parse(File.read(json_path))
-    @index = build_index(@data)
+    @monster_index = build_index(@data)
   end
 
   def call(env)
@@ -26,7 +26,7 @@ module MHGU
     resp = MHGULegend.call(req)
     return resp if resp
 
-    resp = MHGUMonsters.call(req, @index)
+  resp = MHGUMonsters.call(req, @monster_index)
     return resp if resp
 
     resp = MHGUMonster.call(req, @data)
@@ -39,10 +39,10 @@ module MHGU
 
   private
   def build_index(data)
-    (data["monsters"] || {}).values.map do |m|
-      name = m["name"] || m["slug"] || "Monster"
-      slug = (m["slug"] || name.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/^-|-$/, ""))
-  { name: name, slug: slug, url: m["url"], api_url: "/api/v1/monsters/#{Rack::Utils.escape(slug)}" }
+    (data["monsters"] || {}).values.map do |monster|
+      monster_name = monster["name"] || monster["slug"] || "Monster"
+      monster_slug = (monster["slug"] || monster_name.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/^-|-$/, ""))
+      { name: monster_name, slug: monster_slug, url: monster["url"], api_url: "/api/v1/monsters/#{Rack::Utils.escape(monster_slug)}" }
     end.sort_by { |m| m[:name] }
   end
   end
