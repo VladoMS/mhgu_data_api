@@ -14,26 +14,26 @@ module MHGUMonster
 
       return [400, { "Content-Type" => "application/json" }, [JSON.dump(error: "missing slug")]] if slug.to_s.empty?
 
-      mon = find_mon(data, slug.downcase)
-      return [404, { "Content-Type" => "application/json" }, [JSON.dump(error: "monster not found: #{name}")]] unless mon
+  monster = find_mon(data, slug.downcase)
+  return [404, { "Content-Type" => "application/json" }, [JSON.dump(error: "monster not found: #{slug}")]] unless monster
   # Default to JSON; only plain text when ?format=plain
   is_plain = req.params["format"].to_s.downcase == "plain"
 
       if view == 'views' && subview == 'simple'
         if is_plain
-          text = build_simple_text(mon)
+          text = build_simple_text(monster)
           [200, { "Content-Type" => "text/plain; charset=utf-8" }, [text]]
         else
-          body = build_simple_json(mon)
+          body = build_simple_json(monster)
           [200, { "Content-Type" => "application/json" }, [JSON.dump(body)]]
         end
       else
         # default: JSON unless ?format=plain requested
         if is_plain
-          text = build_simple_text(mon)
+          text = build_simple_text(monster)
           [200, { "Content-Type" => "text/plain; charset=utf-8" }, [text]]
         else
-          [200, { "Content-Type" => "application/json" }, [JSON.dump(simple_json(mon))]]
+          [200, { "Content-Type" => "application/json" }, [JSON.dump(simple_json(monster))]]
         end
       end
     else
@@ -42,57 +42,57 @@ module MHGUMonster
   end
 
   # ---------- JSON ----------
-  def simple_json(mon)
-    hit  = mon["hit_data"] || {}
+  def simple_json(monster)
+    hit_data  = monster["hit_data"] || {}
     tabs = {}
-    %w[A B].each do |tab|
-      rows = hit[tab]
+    %w[A B].each do |tab_name|
+      rows = hit_data[tab_name]
       next unless rows && !rows.empty?
-      cleaned = rows.map { |r| scrub_part_hash(r) }.reject { |h| h.keys == [:part] }
-      tabs[tab] = cleaned unless cleaned.empty?
+      cleaned = rows.map { |row| scrub_part_hash(row) }.reject { |h| h.keys == [:part] }
+      tabs[tab_name] = cleaned unless cleaned.empty?
     end
     {
-      name: mon["name"],
-      slug: mon["slug"],
-      url:  mon["url"],
+      name: monster["name"],
+      slug: monster["slug"],
+      url:  monster["url"],
       tabs: tabs,
-      status: scrub_status(mon["abnormal_status"] || {})
+      status: scrub_status(monster["abnormal_status"] || {})
     }
   end
 
-  def scrub_part_hash(r)
-    out = { part: (r["part"] || r["Body Part"]) }
-    (MHGUHelpers::WEAPON_KEYS + MHGUHelpers::ELEM_KEYS).each do |k|
-      v = r[k]
-      out[k.to_sym] = v if v.is_a?(Numeric) && v > 0
+  def scrub_part_hash(row)
+    out = { part: (row["part"] || row["Body Part"]) }
+    (MHGUHelpers::WEAPON_KEYS + MHGUHelpers::ELEM_KEYS).each do |key|
+      value = row[key]
+      out[key.to_sym] = value if value.is_a?(Numeric) && value > 0
     end
     out
   end
 
   def scrub_status(status_hash)
-    status_hash.select { |_k,v| v["initial"].is_a?(Numeric) && v["initial"] > 0 }
+    status_hash.select { |_key,entry| entry["initial"].is_a?(Numeric) && entry["initial"] > 0 }
   end
 
   # ---------- JSON: stars=1 (A/B with summaries) ----------
-  def build_stars_json(mon)
-    body = { name: mon["name"], slug: mon["slug"], url: mon["url"], tabs: {} }
-    hit  = mon["hit_data"] || {}
+  def build_stars_json(monster)
+    body = { name: monster["name"], slug: monster["slug"], url: monster["url"], tabs: {} }
+    hit_data  = monster["hit_data"] || {}
 
-    %w[A B].each do |tab|
-      rows = hit[tab]
+    %w[A B].each do |tab_name|
+      rows = hit_data[tab_name]
       next unless rows && !rows.empty?
 
       elem_key = best_element_key(rows)
-      best_raw  = top_for_key_with_stars(rows, "cut", MHGUHelpers::RAW_THRESH, 3).map  { |x| { part: x[:part], value: x[:val], stars: x[:star], icon: MHGUHelpers::WEAPON_ICONS["cut"] } }
-      best_elem = top_for_key_with_stars(rows, elem_key, MHGUHelpers::ELM_THRESH, 2).map { |x| { part: x[:part], value: x[:val], stars: x[:star] } }
+      best_raw  = top_for_key_with_stars(rows, "cut", MHGUHelpers::RAW_THRESH, 3).map  { |entry| { part: entry[:part], value: entry[:val], stars: entry[:star], icon: MHGUHelpers::WEAPON_ICONS["cut"] } }
+      best_elem = top_for_key_with_stars(rows, elem_key, MHGUHelpers::ELM_THRESH, 2).map { |entry| { part: entry[:part], value: entry[:val], stars: entry[:star] } }
 
-      parts = rows.map { |r| part_entry_with_stars(r) }.reject { |h| h[:raw].empty? && h[:element].empty? }
+      parts = rows.map { |row| part_entry_with_stars(row) }.reject { |h| h[:raw].empty? && h[:element].empty? }
 
-      body[:tabs][tab] = {
+      body[:tabs][tab_name] = {
         best_raw: best_raw,
         best_elem: { element: elem_key, icon: MHGUHelpers::ELEM_ICONS[elem_key], top: best_elem },
         parts: parts,
-        status: status_array(mon["abnormal_status"])
+        status: status_array(monster["abnormal_status"])
       }
     end
 
@@ -100,40 +100,40 @@ module MHGUMonster
   end
 
   # ---------- JSON: stars=2 (simple with summaries) ----------
-  def build_simple_json(mon)
-    body = { name: mon["name"], slug: mon["slug"], url: mon["url"] }
-    hit  = mon["hit_data"] || {}
-    merged_rows = merge_tabs(hit["A"], hit["B"])
+  def build_simple_json(monster)
+    body = { name: monster["name"], slug: monster["slug"], url: monster["url"] }
+    hit_data  = monster["hit_data"] || {}
+    merged_rows = merge_tabs(hit_data["A"], hit_data["B"])
 
-    parts = merged_rows.map { |r| part_entry_with_stars(r) }.reject { |h| h[:raw].empty? && h[:element].empty? }
+    parts = merged_rows.map { |row| part_entry_with_stars(row) }.reject { |h| h[:raw].empty? && h[:element].empty? }
 
-    best_weapons = MHGUHelpers::WEAPON_KEYS.map do |k|
-      x = top_for_key_with_stars(merged_rows, k, MHGUHelpers::RAW_THRESH, 1).first
-      x ? { type: k, icon: MHGUHelpers::WEAPON_ICONS[k], part: x[:part], value: x[:val], stars: x[:star] } : nil
+    best_weapons = MHGUHelpers::WEAPON_KEYS.map do |weapon_key|
+      entry = top_for_key_with_stars(merged_rows, weapon_key, MHGUHelpers::RAW_THRESH, 1).first
+      entry ? { type: weapon_key, icon: MHGUHelpers::WEAPON_ICONS[weapon_key], part: entry[:part], value: entry[:val], stars: entry[:star] } : nil
     end.compact
 
-    best_elements = MHGUHelpers::ELEM_KEYS.map do |k|
-      x = top_for_key_with_stars(merged_rows, k, MHGUHelpers::ELM_THRESH, 1).first
-      x ? { element: k, icon: MHGUHelpers::ELEM_ICONS[k], part: x[:part], value: x[:val], stars: x[:star] } : nil
+    best_elements = MHGUHelpers::ELEM_KEYS.map do |elem_key|
+      entry = top_for_key_with_stars(merged_rows, elem_key, MHGUHelpers::ELM_THRESH, 1).first
+      entry ? { element: elem_key, icon: MHGUHelpers::ELEM_ICONS[elem_key], part: entry[:part], value: entry[:val], stars: entry[:star] } : nil
     end.compact
 
     body[:header] = { best_weapons: best_weapons, best_elements: best_elements }
     body[:parts]  = parts
-    body[:status] = status_array(mon["abnormal_status"])
+    body[:status] = status_array(monster["abnormal_status"])
     body
   end
 
-  def part_entry_with_stars(r)
-    part = r["part"] || r["Body Part"]
+  def part_entry_with_stars(row)
+    part = row["part"] || row["Body Part"]
     raw_vals = {}
-    MHGUHelpers::WEAPON_KEYS.each do |k|
-      v = r[k]
-      raw_vals[k.to_sym] = v if v.is_a?(Numeric) && v > 0
+    MHGUHelpers::WEAPON_KEYS.each do |weapon_key|
+      value = row[weapon_key]
+      raw_vals[weapon_key.to_sym] = value if value.is_a?(Numeric) && value > 0
     end
     elem_vals = {}
-    MHGUHelpers::ELEM_KEYS.each do |k|
-      v = r[k]
-      elem_vals[k.to_sym] = v if v.is_a?(Numeric) && v > 0
+    MHGUHelpers::ELEM_KEYS.each do |elem_key|
+      value = row[elem_key]
+      elem_vals[elem_key.to_sym] = value if value.is_a?(Numeric) && value > 0
     end
 
     stars = {}
@@ -146,12 +146,12 @@ module MHGUMonster
   def status_array(status_hash)
     return [] if status_hash.nil? || status_hash.empty?
     out = []
-    status_hash.each do |k,v|
-      init = v["initial"]
-      next unless init.is_a?(Numeric) && init > 0
-      s = MHGUHelpers.star_or_nil(init, MHGUHelpers::STATUS_THRESH)
-      next unless s
-      out << { key: k, icon: (MHGUHelpers::STATUS_ICONS[k.downcase] || k), initial: init, stars: s }
+    status_hash.each do |status_key,entry|
+      initial_value = entry["initial"]
+      next unless initial_value.is_a?(Numeric) && initial_value > 0
+      star_str = MHGUHelpers.star_or_nil(initial_value, MHGUHelpers::STATUS_THRESH)
+      next unless star_str
+      out << { key: status_key, icon: (MHGUHelpers::STATUS_ICONS[status_key.downcase] || status_key), initial: initial_value, stars: star_str }
     end
     out
   end
@@ -165,22 +165,22 @@ module MHGUMonster
   # ---------- helpers ----------
   def best_element_key(rows)
     best_key, best_val = nil, -1
-    MHGUHelpers::ELEM_KEYS.each do |k|
-      vals = rows.map { |r| r[k] }.select { |v| MHGUHelpers.star_or_nil(v, MHGUHelpers::ELM_THRESH) }
-      v = vals.max || 0
-      if v > best_val
-        best_val = v
-        best_key = k
+    MHGUHelpers::ELEM_KEYS.each do |elem_key|
+      vals = rows.map { |row| row[elem_key] }.select { |value| MHGUHelpers.star_or_nil(value, MHGUHelpers::ELM_THRESH) }
+      value = vals.max || 0
+      if value > best_val
+        best_val = value
+        best_key = elem_key
       end
     end
     best_key || "ice"
   end
 
   def top_for_key_with_stars(rows, key, thr, n)
-    rows.map { |r|
-      v = r[key]
-      s = MHGUHelpers.star_or_nil(v, thr)
-      s ? { part: (r["part"] || r["Body Part"]), val: v, star: s } : nil
+    rows.map { |row|
+      value = row[key]
+      star_str = MHGUHelpers.star_or_nil(value, thr)
+      star_str ? { part: (row["part"] || row["Body Part"]), val: value, star: star_str } : nil
     }.compact.sort_by { |h| -h[:val] }.first(n)
   end
 
@@ -189,18 +189,18 @@ module MHGUMonster
     rows_b = Array(rows_b)
     by_part = {}
 
-    (rows_a + rows_b).each do |r|
-      part = r["part"] || r["Body Part"]
+    (rows_a + rows_b).each do |row|
+      part = row["part"] || row["Body Part"]
       next if part.to_s.empty?
       by_part[part] ||= base_row(part)
-      (MHGUHelpers::WEAPON_KEYS + MHGUHelpers::ELEM_KEYS).each do |k|
-        v = r[k]; next unless v.is_a?(Numeric)
-        prev = by_part[part][k]
-        by_part[part][k] = prev.is_a?(Numeric) ? [prev, v].max : v
+      (MHGUHelpers::WEAPON_KEYS + MHGUHelpers::ELEM_KEYS).each do |key|
+        value = row[key]; next unless value.is_a?(Numeric)
+        prev = by_part[part][key]
+        by_part[part][key] = prev.is_a?(Numeric) ? [prev, value].max : value
       end
     end
 
-    order = (rows_a + rows_b).map { |r| r["part"] || r["Body Part"] }.compact.uniq
+    order = (rows_a + rows_b).map { |row| row["part"] || row["Body Part"] }.compact.uniq
     order.map { |p| by_part[p] }.compact
   end
 
@@ -208,9 +208,9 @@ module MHGUMonster
     { "part"=>part }.merge(Hash[(MHGUHelpers::WEAPON_KEYS + MHGUHelpers::ELEM_KEYS).map { |k| [k, nil] }])
   end
 
-  def find_mon(data, q)
+  def find_mon(data, query)
     mons = data["monsters"] || {}
-    mons.values.find { |m| (m["name"]||"").downcase == q || (m["slug"]||"").downcase == q } ||
-    mons.values.find { |m| (m["name"]||"").downcase.include?(q) }
+    mons.values.find { |m| (m["name"]||"").downcase == query || (m["slug"]||"").downcase == query } ||
+    mons.values.find { |m| (m["name"]||"").downcase.include?(query) }
   end
 end
